@@ -101,7 +101,11 @@ def main(argv=None) -> int:
     ap.add_argument("--core", default=DEFAULT_CORE, required=not DEFAULT_CORE)
     ap.add_argument("--preview", action="store_true", help="open a preview job on the Worker and run it")
     args = ap.parse_args(argv)
-    core = args.core.rstrip("/")
+    # a pasted variable can carry spaces, quotes or invisible characters ("unknown url type: https")
+    core = "".join(c for c in args.core if "!" <= c <= "~" and c not in "\"'<>").rstrip("/")
+    if not core.startswith("https://"):
+        print("::error::CORE_URL must look like https://market-cron.<subdomain>.workers.dev")
+        return 1
     if args.preview:
         j = http.post_json(f"{core}/runner/preview", {}, headers=oidc_headers())
         job_id, token = j["id"], j["token"]
