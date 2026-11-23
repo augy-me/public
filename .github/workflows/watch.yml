@@ -1,8 +1,9 @@
 name: watch-prices
 
 # Runs the Binance part of the price watcher (code in market-runner/). Public repo: Actions minutes are free.
-# No schedule, no data stored here. The Cloudflare Worker market-cron dispatches this with a job id and a
-# one-time token; the runner asks the Worker what to fetch, posts the prices back, sends the ntfy pushes
+# No schedule, no data stored here. The Cloudflare Worker market-cron dispatches this with a job id only
+# (inputs are public here); the runner claims the job's one-time token with the run's OIDC token (once per job),
+# asks the Worker what to fetch, posts the prices back, sends the ntfy pushes
 # the Worker hands over and reports which arrived. Everything else (thresholds, other sources, saving) is on the Worker.
 # Started by hand: `test_notify` previews current prices of every asset, `message` (with an optional `title`) sends
 # one plain push, `rates` (JSON) replaces the savings rates table on the Worker.
@@ -11,10 +12,6 @@ on:
     inputs:
       job:
         description: "Job id (from the Worker market-cron)"
-        type: string
-        default: ""
-      token:
-        description: "One-time token of the job"
         type: string
         default: ""
       test_notify:
@@ -71,5 +68,4 @@ jobs:
         if: ${{ inputs.message == '' && inputs.rates == '' }}
         env:
           JOB: ${{ inputs.job }}
-          JOB_TOKEN: ${{ inputs.token }}
         run: python -m market.runner ${{ inputs.test_notify && '--preview' || '' }}

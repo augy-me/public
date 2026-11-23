@@ -6,7 +6,7 @@ saving) and hands back the pushes, which go out from here because ntfy.sh limits
 sender IP and Cloudflare's IPs are shared; the runner then reports which ones arrived.
 
 Usage (in the workflow):
-    JOB=<id> JOB_TOKEN=<token> python -m market.runner [--core URL]  # default: env CORE_URL
+    JOB=<id> python -m market.runner [--core URL]  # default: env CORE_URL; claims the job with the run's OIDC token
     python -m market.runner --message "text"   # plain push via the Worker (needs the run's OIDC token)
     python -m market.runner --preview          # test push of current prices, started on GitHub (OIDC too)
     python -m market.runner --rates '{...}'    # save the savings rates table of the morning brief (OIDC too)
@@ -115,8 +115,9 @@ def main(argv=None) -> int:
     if args.preview:
         j = http.post_json(f"{core}/runner/preview", {}, headers=oidc_headers())
         job_id, token = j["id"], j["token"]
-    else:
-        job_id, token = os.environ["JOB"], os.environ["JOB_TOKEN"]
+    else:  # the token is not in the (public) inputs: claim it with the run's OIDC token, once per job
+        j = http.post_json(f"{core}/runner/claim", {"job": os.environ["JOB"]}, headers=oidc_headers())
+        job_id, token = j["id"], j["token"]
     headers = {"Authorization": f"Bearer {job_id}.{token}"}
     if os.environ.get("GITHUB_RUN_ID"):
         headers["X-Run-Url"] = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
