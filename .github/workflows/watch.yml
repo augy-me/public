@@ -1,0 +1,75 @@
+name: watch-prices
+
+# Runs the Binance part of the price watcher (code in market-runner/). Public repo: Actions minutes are free.
+# No schedule, no data stored here. The Cloudflare Worker market-cron dispatches this with a job id and a
+# one-time token; the runner asks the Worker what to fetch, posts the prices back, sends the ntfy pushes
+# the Worker hands over and reports which arrived. Everything else (thresholds, other sources, saving) is on the Worker.
+# Started by hand: `test_notify` previews current prices of every asset, `message` (with an optional `title`) sends
+# one plain push, `rates` (JSON) replaces the savings rates table on the Worker.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job id (from the Worker market-cron)"
+        type: string
+        default: ""
+      token:
+        description: "One-time token of the job"
+        type: string
+        default: ""
+      test_notify:
+        description: "Gửi thử: báo giá hiện tại của mọi mã theo đúng định dạng, bỏ qua ngưỡng, không lưu state"
+        type: boolean
+        default: false
+      message:
+        description: "Gửi một push với nội dung này (không kiểm tra giá)"
+        type: string
+        default: ""
+      title:
+        description: "Tiêu đề của push message (tuỳ chọn)"
+        type: string
+        default: ""
+      rates:
+        description: "Bảng lãi suất tiết kiệm (JSON, bản tin sáng ghi): thay bảng lưu trong D1"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write  # OIDC token: proves to the Worker that a hand-started run comes from this repo
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CORE_URL: ${{ vars.CORE_URL }}  # repository variable: address of the Worker market-cron
+    defaults:
+      run:
+        working-directory: market-runner
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Save rates
+        if: ${{ inputs.rates != '' }}
+        env:
+          RATES: ${{ inputs.rates }}
+        run: python -m market.runner --rates "$RATES"
+
+      - name: Send message
+        if: ${{ !cancelled() && inputs.message != '' }}  # even when saving rates failed
+        env:
+          MESSAGE: ${{ inputs.message }}
+          TITLE: ${{ inputs.title }}
+        run: python -m market.runner --message "$MESSAGE" --title "$TITLE"
+
+      - name: Fetch Binance prices for the job
+        if: ${{ inputs.message == '' && inputs.rates == '' }}
+        env:
+          JOB: ${{ inputs.job }}
+          JOB_TOKEN: ${{ inputs.token }}
+        run: python -m market.runner ${{ inputs.test_notify && '--preview' || '' }}
