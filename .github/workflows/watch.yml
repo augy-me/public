@@ -5,8 +5,7 @@ name: watch-prices
 # (inputs are public here); the runner claims the job's one-time token with the run's OIDC token (once per job),
 # asks the Worker what to fetch, posts the prices back, sends the ntfy pushes
 # the Worker hands over and reports which arrived. Everything else (thresholds, other sources, saving) is on the Worker.
-# Started by hand: `test_notify` previews current prices of every asset, `message` (with an optional `title`) sends
-# one plain push, `rates` (JSON) replaces the savings rates table on the Worker.
+# Started by hand: `test_notify` previews current prices of every asset. Nothing else is sent through this repo.
 on:
   workflow_dispatch:
     inputs:
@@ -18,22 +17,10 @@ on:
         description: "Gửi thử: báo giá hiện tại của mọi mã theo đúng định dạng, bỏ qua ngưỡng, không lưu state"
         type: boolean
         default: false
-      message:
-        description: "Gửi một push với nội dung này (không kiểm tra giá)"
-        type: string
-        default: ""
-      title:
-        description: "Tiêu đề của push message (tuỳ chọn)"
-        type: string
-        default: ""
-      rates:
-        description: "Bảng lãi suất tiết kiệm (JSON, bản tin sáng ghi): thay bảng lưu trong D1"
-        type: string
-        default: ""
 
 permissions:
   contents: read
-  id-token: write  # OIDC token: proves to the Worker that a hand-started run comes from this repo
+  id-token: write  # OIDC token: proves to the Worker that the run comes from this repo on main
 
 jobs:
   watch:
@@ -51,21 +38,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Save rates
-        if: ${{ inputs.rates != '' }}
-        env:
-          RATES: ${{ inputs.rates }}
-        run: python -m market.runner --rates "$RATES"
-
-      - name: Send message
-        if: ${{ !cancelled() && inputs.message != '' }}  # even when saving rates failed
-        env:
-          MESSAGE: ${{ inputs.message }}
-          TITLE: ${{ inputs.title }}
-        run: python -m market.runner --message "$MESSAGE" --title "$TITLE"
+      - name: Check CORE_URL
+        run: test -n "$CORE_URL" || { echo "::error::Repository variable CORE_URL is not set (Settings → Secrets and variables → Actions → Variables)"; exit 1; }
 
       - name: Fetch Binance prices for the job
-        if: ${{ inputs.message == '' && inputs.rates == '' }}
         env:
           JOB: ${{ inputs.job }}
         run: python -m market.runner ${{ inputs.test_notify && '--preview' || '' }}

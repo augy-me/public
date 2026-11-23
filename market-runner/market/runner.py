@@ -7,14 +7,14 @@ sender IP and Cloudflare's IPs are shared; the runner then reports which ones ar
 
 Usage (in the workflow):
     JOB=<id> python -m market.runner [--core URL]  # default: env CORE_URL; claims the job with the run's OIDC token
-    python -m market.runner --message "text"   # plain push via the Worker (needs the run's OIDC token)
     python -m market.runner --preview          # test push of current prices, started on GitHub (OIDC too)
-    python -m market.runner --rates '{...}'    # save the savings rates table of the morning brief (OIDC too)
+
+This repo and its run logs are public: stdout gets counts only. The full log (prices, push titles) goes to the
+Worker with the result and is kept there. The morning brief (message, rates, export) runs from a private repo.
 """
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -74,7 +74,7 @@ def send_pushes(target: dict, pushes: list, log=print) -> list:
                 err = f"{type(e).__name__}: {e}"[:300]
                 if attempt == 0:
                     time.sleep(3)
-        log(f"push {'sent' if not err else 'FAILED: ' + err}: {p.get('title') or p['message'].splitlines()[0]}")
+        log(f"push {len(out) + 1}/{len(pushes)}: {'sent' if not err else 'FAILED: ' + err}")  # no text: public log
         out.append({"ok": err is None, "error": err or ""})
     return out
 
@@ -85,7 +85,7 @@ def deliver(core: str, headers: dict, reply: dict) -> int:
         return 0 if reply.get("code") == 0 else 1
     sent = send_pushes(reply["ntfy"], reply["pushes"])
     r = http.post_json(f"{core}/runner/delivered", {"sent": sent}, headers=headers, timeout=60)
-    print(f"Worker: {r}")
+    print(f"Worker: code {r.get('code')}")
     return 0 if r.get("code") == 0 else 1
 
 
@@ -99,19 +99,9 @@ def oidc_headers() -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--core", default=DEFAULT_CORE, required=not DEFAULT_CORE)
-    ap.add_argument("--message", help="send only this text as a push, check nothing")
-    ap.add_argument("--title", default="", help="title of the --message push")
     ap.add_argument("--preview", action="store_true", help="open a preview job on the Worker and run it")
-    ap.add_argument("--rates", metavar="JSON", help="replace the savings rates table (Worker side)")
     args = ap.parse_args(argv)
     core = args.core.rstrip("/")
-    if args.rates:
-        rates = json.loads(args.rates)  # fail here, with the brief's run, on broken JSON
-        print(f"Worker: {http.post_json(f'{core}/runner/rates', {'rates': rates}, headers=oidc_headers())}")
-        return 0
-    if args.message:
-        j = http.post_json(f"{core}/runner/message", {"message": args.message, "title": args.title}, headers=oidc_headers())
-        return deliver(core, {"Authorization": f"Bearer {j['id']}.{j['token']}"}, j)
     if args.preview:
         j = http.post_json(f"{core}/runner/preview", {}, headers=oidc_headers())
         job_id, token = j["id"], j["token"]
@@ -123,9 +113,10 @@ def main(argv=None) -> int:
         headers["X-Run-Url"] = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
                                 f"{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
     job = http.get_json(f"{core}/runner/job", headers=headers)
-    print(f"Job {job['id']} ({job['mode']})")
+    print(f"Job {job['id']} ({job['mode']}): {len(job['requests'])} assets")
     lines = []
-    result = fetch_all(job["requests"], log=lambda s: (print(s), lines.append(s)))
+    result = fetch_all(job["requests"], log=lines.append)  # full log to the Worker only
+    print(f"{len(result['prices'])} prices, {len(result['errors'])} errors")
     # the Worker now fetches the other sources, checks, notifies and saves: allow it some time
     r = http.post_json(f"{core}/runner/result", {**result, "log": "\n".join(lines)}, headers=headers, timeout=120)
     return deliver(core, headers, r)
