@@ -10,7 +10,7 @@ Usage (in the workflow):
     python -m market.runner --preview          # test push of current prices, started on GitHub (OIDC too)
 
 This repo and its run logs are public: stdout gets counts only. The full log (prices, push titles) goes to the
-Worker with the result and is kept there. The morning brief (message, rates, export) runs from a private repo.
+Worker with the result and is kept there. The morning brief does not use this repo: it calls the Worker directly.
 """
 from __future__ import annotations
 
