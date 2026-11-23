@@ -14,7 +14,7 @@ on:
         type: string
         default: ""
       test_notify:
-        description: "Gửi thử: báo giá hiện tại của mọi mã theo đúng định dạng, bỏ qua ngưỡng, không lưu state"
+        description: "Test send: push the current price of every asset in the usual format, ignoring thresholds, without saving state"
         type: boolean
         default: false
 
@@ -39,7 +39,7 @@ jobs:
           python-version: "3.12"
 
       - name: Check CORE_URL
-        run: test -n "$CORE_URL" || { echo "::error::Repository variable CORE_URL is not set (Settings → Secrets and variables → Actions → Variables)"; exit 1; }
+        run: test -n "$CORE_URL" || { echo "::error::Repository variable CORE_URL is not set (Settings > Secrets and variables > Actions > Variables)"; exit 1; }
 
       - name: Fetch Binance prices for the job
         env:

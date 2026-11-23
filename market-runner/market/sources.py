@@ -111,7 +111,7 @@ def binance_p2p(asset: str = "USDT", fiat: str = "VND", trade_type: str = "SELL"
     the highest when selling, the lowest when buying. A best ad more than ``lone`` % beyond the next
     matching ad still counts, but is noted in full (``NOTE``) for later analysis.
 
-    ``spread``: with trade_type SELL, also the best BUY price, for the 🔥 spread in the push
+    ``spread``: with trade_type SELL, also the best BUY price, for the spread line in the push
     (``buy`` = what you get selling, ``sell`` = what you pay buying, as with a dealer)."""
     best = _p2p_best(asset, fiat, trade_type, min_amount, pages, pay_types, lone)
     if not spread:
