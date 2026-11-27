@@ -1,0 +1,38 @@
+name: bls
+
+# Fetches the US CPI index (BLS, else FRED) for a Cloudflare Worker: BLS allows few keyless requests per IP and
+# Workers share theirs, FRED refuses Cloudflare. Code in bls/ and common/. Started only by the Worker's side
+# (workflow_dispatch) with a job id (inputs are public here); the runner claims that job with the run's OIDC token,
+# asks the Worker what to fetch and posts the index back. The log is public: it prints counts only.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job id (from the Worker)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write  # OIDC token: proves to the Worker that the run comes from this workflow of this repo on main
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CORE_URL: ${{ vars.CORE_URL }}  # repository variable: the Worker's address
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check CORE_URL
+        run: test -n "$CORE_URL" || { echo "::error::Repository variable CORE_URL is not set (Settings > Secrets and variables > Actions > Variables)"; exit 1; }
+
+      - name: Fetch the US CPI for the job
+        env:
+          JOB: ${{ inputs.job }}
+        run: python -m bls

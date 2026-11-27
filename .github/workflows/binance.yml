@@ -1,0 +1,45 @@
+name: binance
+
+# Fetches Binance spot and P2P prices for a Cloudflare Worker (Binance refuses Cloudflare). Code in binance/ and
+# common/. No schedule here and no data stored here: the Worker's side dispatches this at :00 and :30 with no inputs
+# (the runner claims a new job with the run's OIDC token, or skips when the Worker says so), or with a job id only
+# for a job the Worker made (inputs are public here). The runner gets a one-time token, asks the Worker what to
+# fetch and posts the prices back; the Worker does everything else. Started by hand: `test_notify` asks the Worker
+# for a preview job. The log is public: it prints counts only.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job id (from the Worker; empty for a scheduled run)"
+        required: false
+        type: string
+        default: ""
+      test_notify:
+        description: "Test send: the Worker pushes the current price of every asset, ignoring thresholds, without saving state"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write  # OIDC token: proves to the Worker that the run comes from this workflow of this repo on main
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CORE_URL: ${{ vars.CORE_URL }}  # repository variable: the Worker's address
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check CORE_URL
+        run: test -n "$CORE_URL" || { echo "::error::Repository variable CORE_URL is not set (Settings > Secrets and variables > Actions > Variables)"; exit 1; }
+
+      - name: Fetch Binance prices for the job
+        env:
+          JOB: ${{ inputs.job }}
+        run: python -m binance ${{ inputs.test_notify && '--preview' || '' }}

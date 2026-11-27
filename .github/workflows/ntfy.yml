@@ -1,0 +1,39 @@
+# Sends the family service's queued ntfy notes (ntfy.sh refuses Cloudflare's shared addresses, so service starts this
+# run instead). Started only by service (workflow_dispatch) with a job id; the run proves itself with its GitHub OIDC
+# token (this repo, main, this workflow), takes the notes, sends them to ntfy.sh and reports which arrived. The log is
+# public: it prints counts only, never a topic or a note's text. Code in ntfy/ and common/.
+# Repo secret SERVICE_URL: https://service.<base> (a secret, so it is masked in the log).
+name: ntfy
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job id from service
+        required: true
+        type: string
+
+permissions:
+  id-token: write # the OIDC token for the claim
+  contents: read # checkout
+
+concurrency:
+  group: ntfy
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Send queued notes
+        env:
+          JOB: ${{ inputs.job }}
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
+        run: python -m ntfy
